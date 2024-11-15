@@ -32,10 +32,13 @@ contract ContractTest is Test {
         vm.expectEmit(true, true, true, true);
         emit VaultManager.AccessGranted();
         
+        // Challenge: Write your solution here
+        // Tip: Study how validateUser() determines if an address belongs to a contract
+        // Solution: Call the prank function with the address of a contract to bypass the security measure
         address eoa = address(0x123);
         vm.prank(eoa);
         vaultManager.authenticateAccess();
-        
+
         // Ensure the accessGranted flag is now true
         assertTrue(vaultManager.accessGranted(), "Challenge incomplete: The vault remains locked");
     }
