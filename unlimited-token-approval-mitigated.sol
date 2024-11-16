@@ -3,32 +3,87 @@ pragma solidity ^0.8.18;
 
 import "forge-std/Test.sol";
 
-contract ContractTestMitigate is Test {
+contract ExploitMitigationTest is Test {
     GalacticTokenMitigate tokenContract;
     address deployer = vm.addr(1);
-    address user = vm.addr(2);
+    address victim = vm.addr(2);
+    address attacker = vm.addr(3);
 
     function setUp() public {
         vm.prank(deployer);
         tokenContract = new GalacticTokenMitigate();
+
+        // Initial setup
         vm.warp(block.timestamp + 1 hours);
         vm.prank(deployer);
         tokenContract.mint(5000);
+
+        // Give victim some tokens
+        vm.prank(deployer);
+        tokenContract.transfer(victim, 1000);
     }
 
-    function testTokenOperations() public {
-        vm.startPrank(deployer);
-        tokenContract.transfer(address(user), 2500);
-        vm.stopPrank();
-        assertEq(
-            tokenContract.balanceOf(user),
-            2500,
-            "Initial transfer failed"
+    function testMitigatedExploit() public {
+        console.log("Victim initial balance:", tokenContract.balanceOf(victim));
+        console.log(
+            "Attacker initial balance:",
+            tokenContract.balanceOf(attacker)
         );
-        console.log("Test environment initialized successfully");
-    }
 
-    receive() external payable {}
+        // Step 1: Victim approves attacker for a limited amount (500 tokens)
+        vm.prank(victim);
+        tokenContract.approve(attacker, 500);
+
+        // Step 2: Attacker drains the approved amount
+        vm.prank(attacker);
+        tokenContract.transferFrom(victim, attacker, 500);
+
+        console.log(
+            "Victim balance after first drain:",
+            tokenContract.balanceOf(victim)
+        );
+        console.log(
+            "Attacker balance after first drain:",
+            tokenContract.balanceOf(attacker)
+        );
+
+        // Step 3: Victim receives more tokens (e.g., as a reward or transfer)
+        vm.prank(deployer);
+        tokenContract.transfer(victim, 500);
+
+        console.log(
+            "Victim balance after receiving more tokens:",
+            tokenContract.balanceOf(victim)
+        );
+
+        // Step 4: Attacker tries to drain additional tokens without new approval
+        vm.expectRevert("Insufficient allowance");
+        vm.prank(attacker);
+        tokenContract.transferFrom(victim, attacker, 500);
+
+        console.log(
+            "Victim balance after failed second drain attempt:",
+            tokenContract.balanceOf(victim)
+        );
+        console.log(
+            "Attacker balance after failed second drain attempt:",
+            tokenContract.balanceOf(attacker)
+        );
+
+        // Verify the second drain was prevented
+        assertEq(
+            tokenContract.balanceOf(victim),
+            1000,
+            "Victim should retain the second set of tokens"
+        );
+        assertEq(
+            tokenContract.balanceOf(attacker),
+            500,
+            "Attacker should not gain additional tokens"
+        );
+
+        console.log("Mitigation successful - Second drain attempt failed!");
+    }
 }
 
 interface IERC20 {
